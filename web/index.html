@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>G.A.R.G.I UI</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #000;
+            color: #fff;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .waveCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #aiResponse {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            font-size: 20px;
+            color: #fff;
+            z-index: 1;
+        }
+
+        #centeredText {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            color: #fff;
+            z-index: 1;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas class="waveCanvas" id="waveCanvas"></canvas>
+    </div>
+
+    <div id="aiResponse"></div>
+    <div id="centeredText">G.A.R.G.I</div>
+
+<script>
+    const canvas = document.getElementById("waveCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const maxAmplitude = canvas.height / 3.5;
+    const baseLine = canvas.height / 2;
+    const numberOfWaves = 10;
+    let globalTime = 0;
+
+    function generateWaveData(frequency = 0.1, amplitude = 64) {
+        const array = new Uint8Array(100);
+        for (let i = 0; i < array.length; i++) {
+            array[i] = (Math.sin(i * frequency + globalTime) + 1) * amplitude;
+        }
+        return array;
+    }
+
+    function drawWaves(dataArray, analyser) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        globalTime += 0.05;
+
+        const isSpeaking = dataArray.some((value) => value > 0);
+        if (isSpeaking) {
+            analyser.getByteFrequencyData(dataArray);
+        } else {
+            dataArray = generateWaveData();
+        }
+
+        for (let j = 0; j < numberOfWaves; j++) {
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = `rgba(${150 + j * 10}, ${50 + j * 20}, ${200 - j * 10}, 0.8)`;
+
+            let x = 0;
+            const sliceWidth = canvas.width / dataArray.length;
+            let lastX = 0;
+            let lastY = baseLine;
+
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i] / 96.0;
+                const amplitude = maxAmplitude * (1 - Math.abs(i - dataArray.length / 2) / (dataArray.length / 2));
+                const y = baseLine + Math.sin(i * (0.05 + j * 0.02) + globalTime + j) * amplitude * v;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    const xc = (x + lastX) / 2;
+                    const yc = (y + lastY) / 2;
+                    ctx.quadraticCurveTo(lastX, lastY, xc, yc);
+                }
+
+                lastX = x;
+                lastY = y;
+                x += sliceWidth;
+            }
+
+            ctx.lineTo(canvas.width, lastY);
+            ctx.stroke();
+        }
+
+        requestAnimationFrame(() => drawWaves(dataArray, analyser));
+    }
+
+    // Function to fetch and display the content of the text file
+    function displayAIResponse() {
+        fetch('input.txt')
+            .then(response => response.text())
+            .then(data => {
+                const aiResponseDiv = document.getElementById('aiResponse');
+                aiResponseDiv.innerText = data;
+            })
+            .catch(error => {
+                console.error('Error fetching AI response:', error);
+            });
+    }
+
+    // Call the function to display AI response
+    displayAIResponse();
+
+    // Update the content periodically
+    setInterval(() => {
+        displayAIResponse();
+    }, 1000); // Update every second
+
+    // Initialize audio analysis
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            const audioContext = new AudioContext();
+            const analyser = audioContext.createAnalyser();
+            const microphone = audioContext.createMediaStreamSource(stream);
+            microphone.connect(analyser);
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            drawWaves(dataArray, analyser);
+        })
+        .catch(error => {
+            console.error('Error accessing microphone:', error);
+        });
+</script>
+</body>
+</html>
